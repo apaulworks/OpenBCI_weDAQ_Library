@@ -1,7 +1,15 @@
 [![Stories in Ready](https://badge.waffle.io/OpenBCI/OpenBCI_32bit_Library.png?label=ready&title=Ready)](https://waffle.io/OpenBCI/OpenBCI_32bit_Library)
-# OpenBCI 32bit Library
+# OpenBCI weDAQ Library
 
-The official library for the OpenBCI 32bit Board.
+A fork of the OpenBCI 32bit Library v3.1.2 <br />
+This repo provides firmware for the weDAQ board. The hardware design files are available here: https://github.com/apaulworks/weDAQ <br />
+For more information, see: <br />
+ the IEEE ISCAS 2022 Proceedings paper here: https://ieeexplore.ieee.org/document/9937994 <br />
+ and the IEEE Transactions on Biomedical Circuits and Systems paper here: https://ieeexplore.ieee.org/abstract/document/10115033 <br />
+<br />
+Easy start: Clone this repo to Arduino IDE libraries folder and compile the DefaultWEDAQ.ino example. <br />
+More detailed instructions to come. 
+
 
 ## Table of Contents:
 

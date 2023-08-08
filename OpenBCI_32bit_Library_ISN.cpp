@@ -7,7 +7,7 @@ an OpenBCI 32bit board with an OpenBCI Daisy Module attached.
 
 */
 
-#include "OpenBCI_32bit_Library.h"
+#include "OpenBCI_32bit_Library_ISN.h"
 
 /***************************************************/
 /** PUBLIC METHODS *********************************/
@@ -468,6 +468,26 @@ boolean OpenBCI_32bit_Library::processChar(char character)
       printSerial("Wifi soft reset");
       sendEOT();
       break;
+    case OPENBCI_WIFI_ONLINE:
+      streamState = true;
+      printSerial("Wifi Stream State Toggled to ONLINE");
+      sendEOT();
+      break;
+    case OPENBCI_WIFI_DARK:
+      streamState = false;
+      printSerial("Wifi Stream State Toggled to DARK");
+      sendEOT();
+      break;
+    case OPENBCI_WIFI_UNCHAIN:
+      unchain = true;
+      printSerial("Wifi Stream Mode Toggled to UNCHAINED");
+      sendEOT();
+      break;
+    case OPENBCI_WIFI_CHAIN:
+      unchain = false;
+      printSerial("Wifi Stream Mode Toggled to CHAINED");
+      sendEOT();
+      break;
     case OPENBCI_GET_VERSION:
       printAll("v3.1.2");
       sendEOT();
@@ -791,7 +811,6 @@ void OpenBCI_32bit_Library::boardReset(void)
 {
   initialize(); // initalizes accelerometer and on-board ADS and on-daisy ADS if present
   delay(500);
-  configureLeadOffDetection(LOFF_MAG_6NA, LOFF_FREQ_31p2HZ);
   printlnAll("OpenBCI V3 8-16 channel");
   printAll("On Board ADS1299 Device ID: 0x");
   printlnHex(ADS_getDeviceID(ON_BOARD));
@@ -1335,7 +1354,7 @@ void __USER_ISR ADS_DRDY_Service()
   clearIntFlag(_EXTERNAL_4_IRQ); // clear the irq, or else it will continually interrupt!
   if (bitRead(PORTA, 0) == 0)
   {
-    board.channelDataAvailable = true;
+    wedaq.channelDataAvailable = true;
   }
 }
 
@@ -1348,6 +1367,10 @@ void OpenBCI_32bit_Library::initializeVariables(void)
   endMultiCharCmdTimer(); // this initializes and resets the variables
   streaming = false;
   verbosity = false; // when verbosity is true, there will be Serial feedback
+
+  // Wifi State Control
+  streamState = true;
+  unchain = false;
 
   // Nums
   ringBufBLEHead = 0;
@@ -1366,7 +1389,7 @@ void OpenBCI_32bit_Library::initializeVariables(void)
   curBoardMode = BOARD_MODE_DEFAULT;
   curDebugMode = DEBUG_MODE_OFF;
   curPacketType = PACKET_TYPE_ACCEL;
-  curSampleRate = SAMPLE_RATE_250;
+  curSampleRate = SAMPLE_RATE_500; // Changed the default sampling_rate to 500
   curTimeSyncMode = TIME_SYNC_MODE_OFF;
 
   // Structs
@@ -1424,9 +1447,9 @@ void OpenBCI_32bit_Library::printAllRegisters()
       printlnAll("Daisy ADS Registers");
       printADSregisters(DAISY_ADS);
     }
-    printlnAll();
-    printlnAll("LIS3DH Registers");
-    LIS3DH_readAllRegs();
+    //printlnAll();
+    //printlnAll("LIS3DH Registers");
+    //LIS3DH_readAllRegs();
     sendEOT();
   }
 }
@@ -1956,13 +1979,13 @@ void OpenBCI_32bit_Library::initialize_ads()
     delay(40);
   }
 
-  // DEFAULT CHANNEL SETTINGS FOR ADS
+  // DEFAULT CHANNEL SETTINGS FOR ADS : Changed the default of ADS Channel settings
   defaultChannelSettings[POWER_DOWN] = NO;                  // on = NO, off = YES
   defaultChannelSettings[GAIN_SET] = ADS_GAIN24;            // Gain setting
   defaultChannelSettings[INPUT_TYPE_SET] = ADSINPUT_NORMAL; // input muxer setting
   defaultChannelSettings[BIAS_SET] = YES;                   // add this channel to bias generation
-  defaultChannelSettings[SRB2_SET] = YES;                   // connect this P side to SRB2
-  defaultChannelSettings[SRB1_SET] = NO;                    // don't use SRB1
+  defaultChannelSettings[SRB2_SET] = NO;                   // connect this P side to SRB2
+  defaultChannelSettings[SRB1_SET] = YES;                    // don't use SRB1
 
   for (int i = 0; i < numChannels; i++)
   {
@@ -1970,10 +1993,10 @@ void OpenBCI_32bit_Library::initialize_ads()
     {
       channelSettings[i][j] = defaultChannelSettings[j]; // assign default settings
     }
-    useInBias[i] = true; // keeping track of Bias Generation
-    useSRB2[i] = true;   // keeping track of SRB2 inclusion
+    useInBias[i] = true; // keeping track of Bias Generation // changed to true, turning Bias ON
+    useSRB2[i] = false;   // keeping track of SRB2 inclusion // changed to false, having SRB2 not included
   }
-  boardUseSRB1 = daisyUseSRB1 = false;
+  boardUseSRB1 = daisyUseSRB1 = true; // changed to true
 
   writeChannelSettings(); // write settings to the on-board and on-daisy ADS if present
 
@@ -1981,9 +2004,18 @@ void OpenBCI_32bit_Library::initialize_ads()
   delay(1); // enable internal reference drive and etc.
   for (int i = 0; i < numChannels; i++)
   { // turn off the impedance measure signal
-    leadOffSettings[i][PCHAN] = OFF;
+    leadOffSettings[i][PCHAN] = ON; // changed to ON to have leadoff detection ON from the beginning
     leadOffSettings[i][NCHAN] = OFF;
   }
+  configureLeadOffDetection(LOFF_MAG_6NA, LOFF_FREQ_FS_4);
+  changeChannelLeadOffDetect();
+
+  WREG(MISC1, 0x20, BOARD_ADS); // open SRB1 switch on-board
+  if (daisyPresent)
+  {
+    WREG(MISC1, 0x20, DAISY_ADS); // open SRB1 switch on-daisy
+  }
+
   verbosity = false; // when verbosity is true, there will be Serial feedback
   firstDataPacket = true;
 
@@ -2322,23 +2354,23 @@ void OpenBCI_32bit_Library::setChannelsToDefault(void)
       channelSettings[i][j] = defaultChannelSettings[j];
     }
     useInBias[i] = true; // keeping track of Bias Generation
-    useSRB2[i] = true;   // keeping track of SRB2 inclusion
+    useSRB2[i] = false;   // keeping track of SRB2 inclusion
   }
-  boardUseSRB1 = daisyUseSRB1 = false;
+  boardUseSRB1 = daisyUseSRB1 = true;
 
   writeChannelSettings(); // write settings to on-board ADS
 
   for (int i = 0; i < numChannels; i++)
   { // turn off the impedance measure signal
-    leadOffSettings[i][PCHAN] = OFF;
+    leadOffSettings[i][PCHAN] = ON;
     leadOffSettings[i][NCHAN] = OFF;
   }
   changeChannelLeadOffDetect(); // write settings to all ADS
 
-  WREG(MISC1, 0x00, BOARD_ADS); // open SRB1 switch on-board
+  WREG(MISC1, 0x20, BOARD_ADS); // open SRB1 switch on-board
   if (daisyPresent)
   {
-    WREG(MISC1, 0x00, DAISY_ADS);
+    WREG(MISC1, 0x20, DAISY_ADS);
   } // open SRB1 switch on-daisy
 }
 
@@ -4376,7 +4408,7 @@ char OpenBCI_32bit_Library::getNumberForAsciiChar(char asciiChar)
 * @param `setting` - [byte] - The byte you need a setting for....
 * @returns - [byte] - Retuns the proper byte for the input setting, defualts to 0
 */
-byte OpenBCI_32bit_Library::getDefaultChannelSettingForSetting(byte setting)
+byte OpenBCI_32bit_Library::getDefaultChannelSettingForSetting(byte setting) // Changing Default Channel Setting for WeDAQ
 {
   switch (setting)
   {
@@ -4389,10 +4421,11 @@ byte OpenBCI_32bit_Library::getDefaultChannelSettingForSetting(byte setting)
   case BIAS_SET:
     return YES;
   case SRB2_SET:
-    return YES;
+    return NO; // changed defaulted setting for SRB2 to NO
   case SRB1_SET:
+    return YES; // changed defaulted setting for SRB1 to YES
   default:
-    return NO;
+    return YES;
   }
 }
 
@@ -4480,4 +4513,4 @@ void OpenBCI_32bit_Library::resetLeadOffArrayToDefault(byte leadOffArray[][OPENB
   }
 }
 
-OpenBCI_32bit_Library board;
+OpenBCI_32bit_Library wedaq;

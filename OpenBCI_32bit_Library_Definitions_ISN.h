@@ -194,6 +194,7 @@
 #define RATE_100HZ		0x50  //(b01010000)	// 100Hz sample rate in normal or low-power mode
 #define RATE_200HZ		0x60  //(b01100000)	// 200Hz sample rate in normal or low-power mode
 #define RATE_400HZ		0x70  //(b01110000)	// 400Hz sample rate in normal or low-power mode
+
 #define RATE_1600HZ_LP	0x80  //(b10000000)	// 1600Hz sample rate in low-power mode
 #define RATE_1250HZ_N	0x90  //(b10010000)	// 1250Hz sample rate in normal mode
 #define RATE_5000HZ_LP	0x90  //(b10010000)	// 5000Hz sample rate in low-power mode
@@ -345,6 +346,10 @@
 #define OPENBCI_WIFI_REMOVE '}'
 #define OPENBCI_WIFI_STATUS ':'
 #define OPENBCI_WIFI_RESET ';'
+#define OPENBCI_WIFI_ONLINE 'O'
+#define OPENBCI_WIFI_DARK 'o'
+#define OPENBCI_WIFI_UNCHAIN 'P'
+#define OPENBCI_WIFI_CHAIN 'g'
 
 /** Possible number of channels */
 #define OPENBCI_NUMBER_OF_CHANNELS_DAISY 16
